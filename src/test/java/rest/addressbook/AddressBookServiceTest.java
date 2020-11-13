@@ -304,9 +304,18 @@ public class AddressBookServiceTest {
     // Check if safe
     assertEquals(2, ab.getPersonList().size());
 
-    // Delete a user
+    // Add a third person
     Client client = ClientBuilder.newClient();
-    Response response = client.target("http://localhost:8282/contacts/person/2").request().delete();
+    Person pablo = new Person();
+    pablo.setName("Pablo");
+    URI pabloURI = URI.create("http://localhost:8282/contacts/person/1");
+    Response response = client.target("http://localhost:8282/contacts").request(MediaType.APPLICATION_JSON)
+        .post(Entity.entity(juan, MediaType.APPLICATION_JSON));
+    assertEquals(201, response.getStatus());
+    assertEquals(pabloURI, response.getLocation());
+
+    // Delete a user
+    response = client.target("http://localhost:8282/contacts/person/2").request().delete();
     assertEquals(204, response.getStatus());
 
     // Verify that the user has been deleted
@@ -319,11 +328,27 @@ public class AddressBookServiceTest {
     //////////////////////////////////////////////////////////////////////
 
     // Check not safe (user deleted)
-    assertEquals(1, ab.getPersonList().size());
+    assertEquals(2, ab.getPersonList().size());
 
     // Check if idempotent (same reply since person was already deleted)
     Response secondResponse = client.target("http://localhost:8282/contacts/person/2").request().delete();
     assertEquals(secondResponse.getStatus(), response.getStatus());
+
+    /*
+     * Bug detected: If people are added to the addressbook manually beforehand, due
+     * to how "nextId" is designed then there can be more than one person with the
+     * same id (Pablo and Salvador in this case), meaning after the first deletion,
+     * a second call to the delete method will still return a status code 204
+     * instead of a 404 as expected, as shown in the folliwing lines
+     */
+    secondResponse = client.target("http://localhost:8282/contacts/person/1").request().delete();
+    assertEquals(204, secondResponse.getStatus());
+
+    secondResponse = client.target("http://localhost:8282/contacts/person/1").request().delete();
+    assertEquals(204, secondResponse.getStatus());
+
+    secondResponse = client.target("http://localhost:8282/contacts/person/1").request().delete();
+    assertEquals(404, secondResponse.getStatus());
 
   }
 
